@@ -1,0 +1,58 @@
+ndpb vlut zuki jkmi--uygulama şifresi gmail
+
+
+
+Kullanıcı Yönetimi
+Kayıt ve Giriş Sistemi ✓
+Email Doğrulama ✓
+Profil Yönetimi ✓
+İki Farklı Kullanıcı Tipi (Freelancer/Müşteri) ✓
+Profil Sistemi
+Profil Fotoğrafı ✓
+Kişisel Bilgiler ✓
+Yetenekler ve Uzmanlıklar
+Portfolyo Yönetimi
+İş Geçmişi
+Sertifikalar
+İş İlanları
+İlan Oluşturma
+İlan Arama ve Filtreleme
+Kategori Sistemi
+Bütçe Belirleme
+Teklif Verme Sistemi
+Mesajlaşma Sistemi
+Gerçek Zamanlı Chat
+Dosya Paylaşımı
+Görüşme Planlaması
+Bildirim Sistemi
+Ödeme Sistemi
+Güvenli Ödeme Altyapısı
+Escrow (Emanet) Sistemi
+Komisyon Yönetimi
+Fatura Oluşturma
+Ödeme Geçmişi
+Değerlendirme Sistemi
+Puanlama
+Yorumlar
+İş Tamamlama Oranı
+Başarı Metrikleri
+Proje Yönetimi
+Milestone (Dönüm Noktası) Sistemi
+Dosya Paylaşımı
+Görev Takibi
+Deadline Yönetimi
+Arama ve Filtreleme
+Gelişmiş Arama
+Kategori Filtreleme
+Fiyat Filtreleme
+Yetenek Bazlı Arama
+Bildirim Sistemi
+Email Bildirimleri
+Push Notifications
+İş Fırsatları
+Sistem Bildirimleri
+10. Raporlama ve Analitik
+Kazanç Raporları
+Performans Metrikleri
+İş İstatistikleri
+Platform Analitiği
