@@ -49,3 +49,5 @@ pool.connect()
             detail: err.detail
         });
     });
+
+// Pool ayarlarını kontrol edin (tekrar tanımlama yapılmamalı)

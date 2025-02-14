@@ -1,106 +1,68 @@
-import pool from '../config/db.config';
+import { pool } from '../config/database';
 
 export interface User {
-    id?: number;
+    id: number;
     email: string;
+    first_name: string;
+    last_name: string;
+    role: string;
     password: string;
-    first_name?: string;
-    last_name?: string;
-    role?: string;
 }
 
 export interface UserProfile {
-    first_name?: string;
-    last_name?: string;
-    email?: string;
-    phone?: string;
-    address?: string;
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+    role: string;
 }
 
 export class UserModel {
-    static async create(user: User) {
-        const query = `
-            INSERT INTO users (email, password, first_name, last_name, role)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING *
-        `;
-        const values = [user.email, user.password, user.first_name, user.last_name, user.role];
-        
-        try {
-            const result = await pool.query(query, values);
-            return result.rows[0];
-        } catch (error) {
-            throw error;
-        }
+    static async findById(id: number): Promise<User | null> {
+        const result = await pool.query(
+            'SELECT id, email, first_name, last_name, role FROM users WHERE id = $1',
+            [id]
+        );
+        return result.rows[0] || null;
     }
 
     static async findByEmail(email: string) {
-        const query = 'SELECT * FROM users WHERE email = $1';
-        
-        try {
-            const result = await pool.query(query, [email]);
-            return result.rows[0];
-        } catch (error) {
-            throw error;
-        }
+        const result = await pool.query(
+            'SELECT id, email, password, first_name, last_name, role FROM users WHERE email = $1',
+            [email]
+        );
+        return result.rows[0];
     }
 
-    static async updatePassword(userId: number, newPassword: string) {
-        const query = `
-            UPDATE users 
-            SET password = $1, 
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $2
-            RETURNING *
-        `;
-        
-        try {
-            const result = await pool.query(query, [newPassword, userId]);
-            return result.rows[0];
-        } catch (error) {
-            throw error;
-        }
+    static async create(user: User): Promise<User> {
+        const result = await pool.query(
+            `INSERT INTO users (email, password, first_name, last_name, role) 
+             VALUES ($1, $2, $3, $4, $5) 
+             RETURNING *`,
+            [user.email, user.password, user.first_name, user.last_name, user.role]
+        );
+        return result.rows[0];
     }
 
-    static async updateProfile(userId: number, profileData: UserProfile) {
-        const query = `
-            UPDATE users 
-            SET 
-                first_name = COALESCE($1, first_name),
-                last_name = COALESCE($2, last_name),
-                email = COALESCE($3, email),
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $4
-            RETURNING id, email, first_name, last_name, role
-        `;
-        
-        const values = [
-            profileData.first_name,
-            profileData.last_name,
-            profileData.email,
-            userId
-        ];
-
-        try {
-            const result = await pool.query(query, values);
-            return result.rows[0];
-        } catch (error) {
-            throw error;
-        }
+    static async updatePassword(userId: number, newPassword: string): Promise<void> {
+        await pool.query(
+            'UPDATE users SET password = $1 WHERE id = $2',
+            [newPassword, userId]
+        );
     }
 
-    static async getProfile(userId: number) {
-        const query = `
-            SELECT id, email, first_name, last_name, role, created_at
-            FROM users
-            WHERE id = $1
-        `;
-        
-        try {
-            const result = await pool.query(query, [userId]);
-            return result.rows[0];
-        } catch (error) {
-            throw error;
-        }
+    static async update(userId: number, profileData: Partial<UserProfile>): Promise<UserProfile> {
+        const result = await pool.query(
+            `UPDATE users 
+             SET email = COALESCE($1, email),
+                 first_name = COALESCE($2, first_name),
+                 last_name = COALESCE($3, last_name)
+             WHERE id = $4
+             RETURNING id, email, first_name, last_name, role`,
+            [profileData.email, profileData.first_name, profileData.last_name, userId]
+        );
+        return result.rows[0];
     }
-} 
+}
+
+export default UserModel; 

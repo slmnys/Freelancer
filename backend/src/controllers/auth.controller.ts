@@ -20,25 +20,36 @@ export class AuthController {
 
             // Kullanıcıyı bul
             const result = await pool.query(
-                'SELECT * FROM users WHERE email = $1',
-                [email.toLowerCase()]
+                `SELECT 
+                    id, 
+                    email, 
+                    password, 
+                    role, 
+                    first_name as "firstName", 
+                    last_name as "lastName" 
+                FROM users 
+                WHERE email = $1`,
+                [email]
             );
 
             if (result.rows.length === 0) {
-                return res.status(401).json({
-                    success: false,
-                    message: 'Email veya şifre hatalı'
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'Kullanıcı bulunamadı' 
                 });
             }
 
             const user = result.rows[0];
 
-            // Şifre kontrolü
-            const isValidPassword = await bcrypt.compare(password, user.password);
-            if (!isValidPassword) {
+            // Şifre karşılaştırma kısmına debug ekleyin
+            console.log('Girilen Şifre:', password);
+            console.log('DB Hash:', user.password);
+            const isValid = await bcrypt.compare(password, user.password);
+            console.log('Şifre Eşleşmesi:', isValid);
+            if (!isValid) {
                 return res.status(401).json({
                     success: false,
-                    message: 'Email veya şifre hatalı'
+                    message: 'Geçersiz şifre'
                 });
             }
 
@@ -49,8 +60,8 @@ export class AuthController {
                     email: user.email,
                     role: user.role 
                 },
-                process.env.JWT_SECRET || 'your-secret-key',
-                { expiresIn: '24h' }
+                process.env.JWT_SECRET!,
+                { expiresIn: '1h' }
             );
 
             // Login başarılı ise last_login'i güncelle
@@ -72,8 +83,8 @@ export class AuthController {
                 user: {
                     id: user.id,
                     email: user.email,
-                    first_name: user.first_name,
-                    last_name: user.last_name,
+                    first_name: user.firstName,
+                    last_name: user.lastName,
                     role: user.role,
                     profile_image: user.profile_image
                 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Container } from '@mui/material';
@@ -8,11 +8,7 @@ const EmailVerification: React.FC = () => {
     const navigate = useNavigate();
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
 
-    useEffect(() => {
-        verifyEmail();
-    }, []);
-
-    const verifyEmail = async () => {
+    const verifyEmail = useCallback(async () => {
         try {
             await axios.get(`/api/auth/verify-email/${token}`);
             setStatus('success');
@@ -20,7 +16,11 @@ const EmailVerification: React.FC = () => {
         } catch (error) {
             setStatus('error');
         }
-    };
+    }, [token, navigate]);
+
+    useEffect(() => {
+        verifyEmail();
+    }, [verifyEmail]);
 
     return (
         <Container>

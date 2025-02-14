@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import pool from '../config/db.config';
+import { pool } from '../config/database';
 import { CustomRequest } from '../types';
 
 export class ConversationController {

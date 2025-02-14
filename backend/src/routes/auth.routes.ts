@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { AuthController } from '../controllers/auth.controller';
+import { getProjectMessages } from '../controllers/message.controller';
 import { authLimiter } from '../middlewares/rate-limit.middleware';
 import { passwordValidationMiddleware } from '../middlewares/validation.middleware';
 import { authMiddleware } from '../middleware/auth.middleware';
@@ -16,7 +17,7 @@ interface AuthRequest extends Request {
 }
 
 const router = Router();
-
+router.get('/project/:projectId', getProjectMessages);
 router.post('/register', authLimiter, passwordValidationMiddleware, AuthController.register);
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
     try {
@@ -32,7 +33,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
 
             if (validPassword) {
                 const token = jwt.sign(
-                    { id: user.id, email: user.email, role: user.role },
+                    { id: user.id, email: user.email },
                     process.env.JWT_SECRET || 'your-secret-key'
                 );
 
@@ -42,7 +43,6 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
                     user: {
                         id: user.id,
                         email: user.email,
-                        role: user.role,
                         first_name: user.first_name
                     }
                 });

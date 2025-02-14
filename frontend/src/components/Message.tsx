@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 
-export interface Message {
+export interface MessageProps {
     id: number;
     sender_id: number;
     message: string;
@@ -10,7 +10,7 @@ export interface Message {
 }
 
 interface Props {
-    message: Message;
+    message: MessageProps;
 }
 
 export const Message: React.FC<Props> = ({ message }) => {

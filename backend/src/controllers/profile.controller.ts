@@ -10,7 +10,7 @@ export class ProfileController {
                 return res.status(401).json({ message: 'Yetkilendirme gerekli' });
             }
 
-            const profile = await UserModel.getProfile(userId);
+            const profile = await UserModel.findById(userId);
             if (!profile) {
                 return res.status(404).json({ message: 'Profil bulunamadı' });
             }
@@ -38,7 +38,7 @@ export class ProfileController {
                 }
             }
 
-            const updatedProfile = await UserModel.updateProfile(userId, profileData);
+            const updatedProfile = await UserModel.update(userId, profileData);
             
             res.status(200).json({
                 message: 'Profil başarıyla güncellendi',

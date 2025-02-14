@@ -5,11 +5,14 @@ interface Message {
   createdAt: string;
 }
 
-interface ChatMessage {
-  id: string;
+export interface ChatMessage {
+  id: number | string;
   content: string;
-  createdAt: string;
+  created_at: string;
+  sender_id: number;
+  recipient_id: number;
+  project_id: number;
   isSender: boolean;
 }
 
-export type { Message, ChatMessage }; 
+export type { Message }; 

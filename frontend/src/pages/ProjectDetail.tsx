@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Box, Typography, CircularProgress, Card, CardContent, Button, Avatar, Chip } from '@mui/material';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Box, Typography, Card, CardContent, Button, Avatar, Chip, CircularProgress, Alert } from '@mui/material';
 import api from '../utils/axios';
 import { MessageOutlined as MessageIcon } from '@mui/icons-material';
 import ChatDialog from '../components/ChatDialog';
@@ -23,50 +23,61 @@ interface Project {
 const ProjectDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const location = useLocation();
+  const [recipientId, setRecipientId] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProjectDetail = async () => {
-      if (!id) {
-        setError("Geçersiz proje id.");
-        setLoading(false);
-        return;
-      }
+    const fetchProject = async () => {
+      if (!id) return;
       try {
         setLoading(true);
         const response = await api.get(`/projects/${id}`);
         
-        if (response.data && response.data.success) {
-          if (response.data.project && response.data.project.budget && response.data.project.deadline && response.data.project.created_at) {
-            setProject({
-              ...response.data.project,
-              budget: parseFloat(response.data.project.budget),
-              deadline: new Date(response.data.project.deadline).toISOString(),
-              created_at: new Date(response.data.project.created_at).toISOString(),
-              customer_id: response.data.project.customer_id,
-            });
-          } else {
-            setError("Veriler eksik veya hatalı.");
-          }
-        } else {
-          setError("Proje bulunamadı.");
+        if (!response.data?.project) {
+          throw new Error('Proje bulunamadı');
         }
-      } catch (err: any) {
-        console.error("Project detail fetch error:", err);
-        setError(err.response?.data?.message || "Proje yüklenirken hata oluştu.");
+
+        setProject(response.data.project);
+      } catch (err) {
+        console.error('Proje yükleme hatası:', err);
+        setError('Proje yüklenemedi');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProjectDetail();
+    fetchProject();
   }, [id]);
 
+  useEffect(() => {
+    if (project?.customer_id) {
+      const validRecipientId = project.customer_id.toString();
+      if (validRecipientId && validRecipientId !== recipientId) {
+        console.log('RecipientID Güncellendi:', validRecipientId);
+        setRecipientId(validRecipientId);
+      }
+    }
+  }, [project, recipientId]);
+
+  useEffect(() => {
+    if (location.state?.openChat) {
+      setIsChatOpen(true);
+    }
+  }, [location.state?.openChat]);
+
+  console.log('Proje Verisi:', {
+    id: project?.id,
+    customerId: project?.customer_id,
+    rawData: project
+  });
+
   if (loading) return <CircularProgress />;
-  if (error) return <Typography color="error">{error}</Typography>;
+  if (error) return <Alert severity="error">{error}</Alert>;
+
   if (!project) return null;
 
   return (
@@ -137,6 +148,7 @@ const ProjectDetail: React.FC = () => {
             open={isChatOpen}
             onClose={() => setIsChatOpen(false)}
             projectId={id || ''}
+            recipientId={recipientId}
           />
         </div>
       </CardContent>

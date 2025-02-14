@@ -8,6 +8,7 @@ export function useAuth() {
             if (response.data.success) {
                 localStorage.setItem('token', response.data.token);
                 localStorage.setItem('userId', response.data.user.id.toString());
+
                 
                 console.log('Login bilgileri:', {
                     token: response.data.token,

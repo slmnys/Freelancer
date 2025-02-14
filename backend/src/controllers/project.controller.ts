@@ -149,34 +149,40 @@ export class ProjectController {
     static async getProjectById(req: Request, res: Response) {
         try {
             const { id } = req.params;
-
             const result = await pool.query(
                 `SELECT 
                     p.*,
-                    u.first_name as customer_name,
-                    u.profile_image as customer_image
+                    u.id as customer_id,
+                    u.first_name || ' ' || u.last_name as customer_name,
+                    u.email as customer_email
                 FROM projects p
-                LEFT JOIN users u ON p.customer_id = u.id
+                INNER JOIN users u ON p.customer_id = u.id
                 WHERE p.id = $1`,
                 [id]
             );
-
+            
             if (result.rows.length === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Proje bulunamadı'
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'Proje bulunamadı' 
                 });
             }
-
+            
+            const project = result.rows[0];
             res.json({
                 success: true,
-                project: result.rows[0]
+                project: {
+                    ...project,
+                    customer_id: project.customer_id.toString(), // ID'yi string'e çevir
+                    budget: parseFloat(project.budget),
+                    deadline: new Date(project.deadline).toISOString()
+                }
             });
         } catch (error) {
-            console.error('Proje detayı alınırken hata:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Sunucu hatası'
+            console.error('Proje detay hatası:', error);
+            res.status(500).json({ 
+                success: false, 
+                message: 'Sunucu hatası' 
             });
         }
     }

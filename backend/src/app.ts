@@ -3,6 +3,9 @@ import path from 'path';
 import fs from 'fs';
 import cors from 'cors';
 import helmet from 'helmet';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
 
 import userRoutes from './routes/user.routes';
 import productRoutes from './routes/product.routes';
@@ -19,6 +22,7 @@ import messageRoutes from './routes/message.routes';
 import { pool } from './config/database';
 
 const app = express();
+const httpServer = createServer(app);
 
 // Middleware
 
@@ -37,10 +41,12 @@ app.use((req, res, next) => {
 // Statik dosya servisini en başa al
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// CORS ayarları
+// CORS ayarlarını güncelle
 app.use(cors({
-    origin: 'http://localhost:3001', // Frontend'in çalıştığı port
-    credentials: true // Frontend ile güvenli veri alışverişi
+    origin: 'http://localhost:3001',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // CORS hata ayıklama
@@ -56,6 +62,7 @@ app.use((req, res, next) => {
 app.use(helmet());
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Uploads klasörünü oluştur
 const profileImagesDir = path.join(path.join(__dirname, '../uploads'), 'profile-images');
@@ -91,9 +98,80 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Socket.IO kurulumu
+const io = new Server(httpServer, {
+    cors: {
+        origin: 'http://localhost:3001',
+        methods: ['GET', 'POST'],
+        credentials: true,
+        allowedHeaders: ['Authorization']
+    }
+});
+
+// Socket yetkilendirme middleware
+io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (!token) {
+        return next(new Error('Yetkilendirme gerekli'));
+    }
+    
+    try {
+        // Token doğrulama
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || '736273');
+        socket.data.user = decoded;
+        next();
+    } catch (err) {
+        next(new Error('Geçersiz token'));
+    }
+});
+
+// Socket.IO bağlantıları
+io.on('connection', (socket) => {
+    console.log('Yeni socket bağlantısı:', socket.id);
+    
+    socket.on('joinRoom', (roomId) => {
+        socket.join(roomId);
+        console.log(`Socket ${socket.id} joined room ${roomId}`);
+    });
+    
+    socket.on('chatMessage', async (data) => {
+        console.log('Socket üzerinden gelen mesaj:', data);
+        
+        try {
+            // Mesajı veritabanına kaydet
+            const result = await pool.query(
+                `INSERT INTO messages 
+                 (message_content, content, sender_id, recipient_id, project_id, created_at)
+                 VALUES ($1, $1, $2, $3, $4, CURRENT_TIMESTAMP)
+                 RETURNING id, message_content, content, sender_id, recipient_id, project_id, created_at`,
+                [data.content, data.senderId, data.receiverId, data.projectId]
+            );
+            
+            console.log('Veritabanına kaydedilen mesaj:', result.rows[0]);
+            
+            // Mesajı socket üzerinden yayınla
+            const savedMessage = {
+                ...result.rows[0],
+                id: result.rows[0].id.toString(),
+                content: result.rows[0].message_content || result.rows[0].content
+            };
+            
+            io.to(data.projectId.toString()).emit('newMessage', savedMessage);
+        } catch (error) {
+            console.error('Mesaj kaydetme hatası:', error);
+            console.error('Hata detayları:', {
+                error_message: (error as Error).message,
+                error_detail: (error as any).detail,
+                error_code: (error as any).code
+            });
+        }
+    });
+});
+
+// Sunucuyu başlat
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
 
-export default app;
+export { app, io };

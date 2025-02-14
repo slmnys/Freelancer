@@ -1,41 +1,61 @@
-import mongoose from 'mongoose';
+import { pool } from '../config/database';
 
-const messageSchema = new mongoose.Schema({
-    sender: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    receiver: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    project: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Project',
-        required: true
-    },
-    content: {
-        type: String,
-        required: true
-    },
-    read: {
-        type: Boolean,
-        default: false
-    }
-}, { timestamps: true });
-
-export const Message = mongoose.model('Message', messageSchema);
-
-interface Conversation {
-    id: number;
+export interface IMessage {
+    id?: number;
     project_id: number;
-    customer_id: number;
-    developer_id: number;
-    status: 'pending' | 'active' | 'completed' | 'cancelled';
-    created_at: Date;
-    customer_approved: boolean;
-    developer_approved: boolean;
-    final_price: number;
-} 
+    sender_id: number;
+    recipient_id: number;
+    content: string;
+    read?: boolean;
+    created_at?: Date;
+    sender_name?: string;
+}
+
+export class MessageModel {
+    /**
+     * Yeni mesaj oluşturma
+     */
+    static async create(message: IMessage): Promise<IMessage> {
+        const result = await pool.query<IMessage>(
+            `INSERT INTO messages 
+             (project_id, sender_id, recipient_id, content, read, created_at)
+             VALUES ($1, $2, $3, $4, $5, NOW())
+             RETURNING *`,
+            [
+                message.project_id,
+                message.sender_id,
+                message.recipient_id,
+                message.content,
+                message.read ?? false
+            ]
+        );
+        return result.rows[0];
+    }
+
+    /**
+     * Bir projeye ait mesajları getirir
+     */
+    static async findByProject(projectId: number): Promise<IMessage[]> {
+        const result = await pool.query<IMessage>(
+            `SELECT * FROM messages
+             WHERE project_id = $1
+             ORDER BY created_at ASC`,
+            [projectId]
+        );
+        return result.rows;
+    }
+
+    /**
+     * Tek bir mesajı ID'ye göre getirir
+     */
+    static async findById(id: number): Promise<IMessage | null> {
+        const result = await pool.query<IMessage>(
+            `SELECT * FROM messages
+             WHERE id = $1`,
+            [id]
+        );
+        return result.rows[0] || null;
+    }
+}
+
+export default MessageModel; 

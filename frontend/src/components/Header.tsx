@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { Link, useNavigate } from 'react-router-dom';
+import { NotificationBadge } from './NotificationBadge';
 
 interface HeaderProps {
     isAuthenticated: boolean;
@@ -132,6 +133,7 @@ export const Header: React.FC<HeaderProps> = ({ isAuthenticated }) => {
                         </>
                     )}
                 </Box>
+                <NotificationBadge />
             </Toolbar>
         </AppBar>
     );

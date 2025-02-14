@@ -5,102 +5,90 @@ import {
   IconButton,
   Box,
   Typography,
-  Stack
+  Stack,
+  Alert
 } from '@mui/material';
 import { Send as SendIcon, Close as CloseIcon, Remove as MinimizeIcon } from '@mui/icons-material';
-import { useMessages } from '../hooks/useMessages';
 import Draggable from 'react-draggable';
-import { ChatMessage } from '../types/chat';
-import api from '../utils/axios';
+import { useSocket } from '../hooks/useSocket';
+import { useMessages } from '../hooks/useMessages';
 
 interface ChatDialogProps {
   open: boolean;
   onClose: () => void;
   projectId: string;
-  recipientId?: string;
+  recipientId: string;
 }
 
-function ChatDialog({ open, onClose, projectId }: ChatDialogProps) {
-  const [recipientId, setRecipientId] = useState<string>('');
+function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) {
   const [newMessage, setNewMessage] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const nodeRef = useRef(null);
+  const nodeRef = useRef<HTMLDivElement>(null);
+  const socket = useSocket(projectId);
   
-  // useMessages hook'unu recipientId varsa kullan
-  const { messages, isLoading, sendMessage } = useMessages(projectId, recipientId);
+  const parsedProjectId = parseInt(projectId, 10);
+  const parsedRecipientId = parseInt(recipientId, 10);
+  
+  const { messages: fetchedMessages, isLoading, sendMessage } = useMessages(
+    projectId,
+    recipientId
+  );
+  
+  useEffect(() => {
+    scrollToBottom();
+  }, [fetchedMessages]);
 
-  // Otomatik scroll
+  useEffect(() => {
+    const currentSocket = socket.current;
+    
+    const messageHandler = (message: any) => {
+      if (message.project_id === parsedProjectId) {
+        scrollToBottom();
+      }
+    };
+
+    currentSocket?.on('newMessage', messageHandler);
+    return () => {
+      currentSocket?.off('newMessage', messageHandler);
+    };
+  }, [parsedProjectId, socket]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  if (!projectId || !recipientId) {
+    return <Alert severity="error">Geçersiz iletişim kanalı</Alert>;
+  }
+  
+  if (isNaN(parsedProjectId) || parsedProjectId <= 0) {
+    return <Alert severity="error">Geçersiz proje</Alert>;
+  }
+  
+  if (isNaN(parsedRecipientId) || parsedRecipientId <= 0) {
+    return <Alert severity="error">Geçersiz alıcı</Alert>;
+  }
 
-  useEffect(() => {
-    const fetchProjectDetails = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const userId = localStorage.getItem('userId');
-
-            // Debug için userId'nin değerini kontrol edelim
-            console.log('Mevcut userId:', {
-                rawUserId: userId,
-                fromStorage: localStorage.getItem('userId'),
-                allStorage: { ...localStorage }
-            });
-
-            if (!token || !userId) {
-                console.error('Kullanıcı bilgileri eksik:', { token: !!token, userId: !!userId });
-                return;
-            }
-
-            const projectResponse = await api.get(`/projects/${projectId}`);
-            
-            if (projectResponse.data?.project) {
-                const project = projectResponse.data.project;
-                const parsedUserId = parseInt(userId);
-
-                // Debug için proje ve ID karşılaştırması
-                console.log('ID Karşılaştırması:', {
-                    parsedUserId,
-                    creatorId: project.creator_id,
-                    customerId: project.customer_id,
-                    rawUserId: userId
-                });
-
-                const newRecipientId = parsedUserId === project.creator_id ? 
-                    project.customer_id : project.creator_id;
-
-                setRecipientId(newRecipientId.toString());
-            }
-        } catch (error) {
-            console.error('Proje detayları alınamadı:', error);
-        }
-    };
-
-    if (open && projectId) {
-        fetchProjectDetails();
-    }
-  }, [open, projectId]);
-
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Form gönderildi:', { newMessage, projectId, recipientId });
-    
-    if (newMessage.trim()) {
-        sendMessage(newMessage, {
-            onSuccess: () => {
-                console.log('Mesaj gönderme başarılı');
-                setNewMessage('');
-                scrollToBottom();
-            },
-            onError: (error) => {
-                console.error('Mesaj gönderme hatası:', error);
-            }
-        });
+    if (!newMessage.trim()) return;
+
+    try {
+      await sendMessage(newMessage);
+      setNewMessage('');
+      
+      socket.current?.emit('newMessage', {
+        content: newMessage,
+        projectId: parsedProjectId,
+        recipientId: parsedRecipientId,
+        senderId: parseInt(localStorage.getItem('userId') || '0', 10)
+      });
+
+      scrollToBottom();
+    } catch (error) {
+      console.error('Mesaj gönderme hatası:', error);
+      alert(`Mesaj gönderilemedi: ${(error as Error).message}`);
     }
   };
 
@@ -110,9 +98,12 @@ function ChatDialog({ open, onClose, projectId }: ChatDialogProps) {
     <Draggable 
       handle=".chat-header" 
       nodeRef={nodeRef}
+      bounds="parent"
+      defaultPosition={{ x: 0, y: 0 }}
     >
       <Paper
         ref={nodeRef}
+        elevation={3}
         sx={{
           position: 'fixed',
           bottom: 0,
@@ -123,9 +114,9 @@ function ChatDialog({ open, onClose, projectId }: ChatDialogProps) {
           flexDirection: 'column',
           boxShadow: 3,
           zIndex: 1000,
+          backgroundColor: 'background.paper'
         }}
       >
-        {/* Sohbet Başlığı */}
         <Box
           className="chat-header"
           sx={{
@@ -140,7 +131,11 @@ function ChatDialog({ open, onClose, projectId }: ChatDialogProps) {
         >
           <Typography variant="subtitle2">Mesajlar</Typography>
           <Box>
-            <IconButton size="small" onClick={() => setIsMinimized(!isMinimized)} sx={{ color: 'white' }}>
+            <IconButton 
+              size="small" 
+              onClick={() => setIsMinimized(!isMinimized)} 
+              sx={{ color: 'white' }}
+            >
               <MinimizeIcon />
             </IconButton>
             <IconButton size="small" onClick={onClose} sx={{ color: 'white' }}>
@@ -151,13 +146,14 @@ function ChatDialog({ open, onClose, projectId }: ChatDialogProps) {
 
         {!isMinimized && (
           <>
-            {/* Mesaj Listesi */}
-            <Box sx={{ flexGrow: 1, overflow: 'auto', p: 1 }}>
-              <Stack spacing={1}>
-                {isLoading ? (
-                  <Typography variant="body2" align="center">Mesajlar yükleniyor...</Typography>
-                ) : (
-                  messages?.map((message: ChatMessage) => (
+            <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
+              {isLoading ? (
+                <Typography variant="body2" align="center">
+                  Mesajlar yükleniyor...
+                </Typography>
+              ) : (
+                <Stack spacing={2}>
+                  {fetchedMessages?.map((message) => (
                     <Box
                       key={message.id}
                       sx={{
@@ -167,52 +163,68 @@ function ChatDialog({ open, onClose, projectId }: ChatDialogProps) {
                     >
                       <Paper
                         sx={{
-                          p: 1,
-                          maxWidth: '70%',
+                          p: 1.5,
+                          maxWidth: '80%',
                           bgcolor: message.isSender ? 'primary.main' : 'grey.100',
                           color: message.isSender ? 'white' : 'text.primary',
                           borderRadius: 2,
                         }}
                       >
-                        <Typography variant="body2">{message.content}</Typography>
+                        <Typography variant="body2">
+                          {!message.isSender && (
+                            <Typography 
+                              component="span" 
+                              sx={{ 
+                                fontSize: '0.8rem', 
+                                color: 'text.secondary',
+                                display: 'block',
+                                mb: 0.5 
+                              }}
+                            >
+                              {message.sender_name}
+                            </Typography>
+                          )}
+                          {message.content || 'Boş mesaj'}
+                        </Typography>
                         <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                          {new Date(message.createdAt).toLocaleTimeString()}
+                          {new Date(message.created_at).toLocaleTimeString('tr-TR')}
                         </Typography>
                       </Paper>
                     </Box>
-                  ))
-                )}
-                <div ref={messagesEndRef} />
-              </Stack>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </Stack>
+              )}
             </Box>
 
-            {/* Mesaj Gönderme Formu */}
-            <Box 
-              component="form" 
-              onSubmit={handleSend} 
-              sx={{ 
-                p: 1, 
-                display: 'flex', 
-                gap: 1, 
-                borderTop: 1, 
-                borderColor: 'divider' 
+            <Box
+              component="form"
+              onSubmit={handleSend}
+              sx={{
+                p: 2,
+                borderTop: 1,
+                borderColor: 'divider',
+                backgroundColor: 'background.paper',
               }}
             >
-              <TextField
-                fullWidth
-                size="small"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Mesajınızı yazın..."
-                variant="outlined"
-              />
-              <IconButton 
-                color="primary" 
-                type="submit" 
-                disabled={!newMessage.trim()}
-              >
-                <SendIcon />
-              </IconButton>
+              <Stack direction="row" spacing={1}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Mesajınızı yazın..."
+                  variant="outlined"
+                  inputProps={{ maxLength: 500 }}
+                />
+                <IconButton
+                  color="primary"
+                  type="submit"
+                  disabled={!newMessage.trim()}
+                >
+                  <SendIcon />
+                </IconButton>
+              </Stack>
             </Box>
           </>
         )}
