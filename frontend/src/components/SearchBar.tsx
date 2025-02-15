@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Paper, 
     InputBase, 
@@ -7,7 +7,6 @@ import {
     CircularProgress
 } from '@mui/material';
 import { Search as SearchIcon, Clear as ClearIcon } from '@mui/icons-material';
-import { debounce } from 'lodash';
 
 interface Props {
     onSearch: (query: string) => void;
@@ -17,29 +16,16 @@ const SearchBar: React.FC<Props> = ({ onSearch }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearching, setIsSearching] = useState(false);
 
-    // Debounce fonksiyonu oluştur
-    const debouncedSearch = useCallback(
-        debounce((query: string) => {
-            onSearch(query);
-            setIsSearching(false);
-        }, 500),
-        [onSearch]
-    );
-
     // Arama değiştiğinde
     useEffect(() => {
-        if (searchQuery !== '') {
-            setIsSearching(true);
-            debouncedSearch(searchQuery);
-        } else {
-            onSearch('');
+        setIsSearching(true);
+        const timeoutId = setTimeout(() => {
+            onSearch(searchQuery);
             setIsSearching(false);
-        }
+        }, 500);
 
-        return () => {
-            debouncedSearch.cancel();
-        };
-    }, [searchQuery, debouncedSearch]);
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery, onSearch]);
 
     const handleClear = () => {
         setSearchQuery('');

@@ -22,31 +22,65 @@ export class ProjectController {
 
             const user = (req as any).user;
 
-            const result = await pool.query(
-                `INSERT INTO projects 
-                (title, description, requirements, budget, deadline, category, customer_id, status, is_public)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', true)
-                RETURNING *`,
-                [
-                    title,
-                    description,
-                    Array.isArray(requirements) ? requirements : requirements.split(',').map((r: string) => r.trim()),
-                    parseFloat(budget),
-                    deadline,
-                    category,
-                    user.id
-                ]
-            );
+            // İstek verilerini logla
+            console.log('=== Proje Oluşturma Detayları ===');
+            console.log('Kullanıcı bilgisi:', {
+                userId: user?.id,
+                userRole: user?.role
+            });
+            console.log('Proje verileri:', {
+                title,
+                description,
+                requirements: Array.isArray(requirements) ? requirements : requirements.split(','),
+                budget: parseFloat(budget),
+                deadline,
+                category
+            });
 
+            // SQL sorgusunu logla
+            const query = `INSERT INTO projects 
+                (title, description, requirements, budget, deadline, category, customer_id, creator_id, status, is_public)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'open', true)
+                RETURNING *`;
+            
+            console.log('SQL Sorgusu:', query);
+            console.log('Parametre değerleri:', [
+                title,
+                description,
+                Array.isArray(requirements) ? requirements : requirements.split(',').map((r: string) => r.trim()),
+                parseFloat(budget),
+                deadline,
+                category,
+                user.id
+            ]);
+
+            const result = await pool.query(query, [
+                title,
+                description,
+                Array.isArray(requirements) ? requirements : requirements.split(',').map((r: string) => r.trim()),
+                parseFloat(budget),
+                deadline,
+                category,
+                user.id
+            ]);
+
+            console.log('Veritabanı yanıtı:', result.rows[0]);
+            
             res.status(201).json({
                 success: true,
                 project: result.rows[0]
             });
-        } catch (error) {
-            console.error('Proje oluşturma hatası:', error);
+        } catch (error: any) {
+            console.error('=== Proje Oluşturma Hatası ===');
+            console.error('Hata mesajı:', error.message);
+            console.error('Hata detayı:', error);
+            console.error('SQL Hatası:', error.code);
+            console.error('SQL Detay:', error.detail);
+            
             res.status(500).json({
                 success: false,
-                message: 'Proje oluşturulurken bir hata oluştu'
+                message: 'Proje oluşturulurken bir hata oluştu',
+                error: error.message
             });
         }
     }

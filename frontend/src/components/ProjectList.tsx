@@ -50,6 +50,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
     const fetchProjects = async () => {
       try {
         setLoading(true);
+        console.log('Kategori filtresi:', categoryFilter);
+
         const response = await api.get('/projects', {
           params: {
             sort: sortBy,
@@ -58,10 +60,20 @@ const ProjectList: React.FC<ProjectListProps> = ({
           }
         });
 
-        // API yanıtını kontrol et
+        console.log('Gelen projeler:', response.data.projects);
+        
         if (response.data && response.data.success) {
-          // Doğrudan projects array'ini al
-          setProjects(response.data.projects);
+          let filteredProjects = response.data.projects;
+          
+          // Kategori filtreleme
+          if (categoryFilter && categoryFilter !== 'all') {
+            filteredProjects = filteredProjects.filter(
+              (project: Project) => project.category === categoryFilter
+            );
+            console.log('Kategori sonrası projeler:', filteredProjects);
+          }
+
+          setProjects(filteredProjects);
         } else {
           setError('Projeler alınamadı');
           setProjects([]);

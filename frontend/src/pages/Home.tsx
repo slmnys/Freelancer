@@ -106,6 +106,13 @@ const Home: React.FC = () => {
                                 <MenuItem value="web">Web Geliştirme</MenuItem>
                                 <MenuItem value="mobile">Mobil Uygulama</MenuItem>
                                 <MenuItem value="desktop">Masaüstü Uygulama</MenuItem>
+                                <MenuItem value="ai">Yapay Zeka</MenuItem>
+                                <MenuItem value="data_analysis">Veri Analizi</MenuItem>
+                                <MenuItem value="ui_ux">UI/UX Tasarım</MenuItem>
+                                <MenuItem value="marketing">Dijital Pazarlama</MenuItem>
+                                <MenuItem value="seo">SEO</MenuItem>
+                                <MenuItem value="other">Diğer</MenuItem>
+                                
                             </Select>
                         </FormControl>
                     </Grid>

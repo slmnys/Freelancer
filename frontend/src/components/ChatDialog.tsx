@@ -25,7 +25,7 @@ function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) 
   const [isMinimized, setIsMinimized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
-  const socket = useSocket(projectId);
+  const socket = useSocket();
   
   const parsedProjectId = parseInt(projectId, 10);
   const parsedRecipientId = parseInt(recipientId, 10);
