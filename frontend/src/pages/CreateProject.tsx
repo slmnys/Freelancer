@@ -64,8 +64,6 @@ const CreateProject: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        setError(null);
-
         try {
             const token = localStorage.getItem('token');
             if (!token) {
@@ -75,27 +73,38 @@ const CreateProject: React.FC = () => {
             const projectData = {
                 ...formData,
                 budget: parseFloat(formData.budget),
-                requirements: formData.requirements.split(',').map(r => r.trim())
+                requirements: formData.requirements.split(',').map(r => r.trim()),
+                deadline: new Date(formData.deadline).toISOString().split('T')[0]
             };
 
-            console.log('Token:', token);
             console.log('Gönderilen veriler:', projectData);
 
-            const response = await axios.post('/api/projects', projectData, {
+            const response = await axios.post('http://localhost:3000/api/projects', projectData, {
                 headers: { 
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 }
             });
 
+            console.log('API Yanıtı:', response.data);
+
             if (response.data.success) {
+                // Başarılı olduğunda önce bekle, sonra yönlendir
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 navigate('/my-projects');
             } else {
-                throw new Error(response.data.message);
+                setError('Proje oluşturulamadı: ' + (response.data.message || 'Bilinmeyen hata'));
             }
         } catch (error: any) {
             console.error('Proje oluşturma hatası:', error);
-            setError(error.response?.data?.message || 'Proje oluşturulurken bir hata oluştu');
+            console.error('Hata detayı:', error.response?.data);
+            setError(
+                error.response?.data?.message || 
+                error.message || 
+                'Proje oluşturulurken bir hata oluştu'
+            );
+            // Hata durumunda yönlendirme yapma
+            return;
         } finally {
             setLoading(false);
         }

@@ -200,46 +200,57 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
 };
 
 export const getChatHistory = async (req: AuthRequest, res: Response) => {
-  try {
-    const { projectId, recipientId } = req.params;
-    const senderId = req.user?.id;
+    try {
+        const { projectId, recipientId } = req.params;
+        const userId = req.user?.id;
 
-    const result = await pool.query(
-      `SELECT 
-        m.id,
-        m.message_content as content,
-        m.created_at,
-        m.sender_id,
-        m.recipient_id,
-        CONCAT(u.first_name, ' ', u.last_name) as sender_name
-      FROM messages m
-      LEFT JOIN users u ON m.sender_id = u.id
-      WHERE m.project_id = $1
-      AND (
-        (m.sender_id = $2 AND m.recipient_id = $3)
-        OR 
-        (m.sender_id = $3 AND m.recipient_id = $2)
-      )
-      ORDER BY m.created_at ASC`,
-      [projectId, senderId, recipientId]
-    );
+        console.log('Chat geçmişi isteği:', {
+            userId,
+            recipientId,
+            projectId
+        });
 
-    return res.json({
-      success: true,
-      data: result.rows.map(row => ({
-        ...row,
-        id: row.id.toString(),
-        isSender: row.sender_id === senderId,
-        sender_name: row.sender_name
-      }))
-    });
-  } catch (error) {
-    console.error('Sohbet geçmişi alınamadı:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Sohbet geçmişi getirilemedi'
-    });
-  }
+        // İki yönlü mesajlaşmayı getir
+        const result = await pool.query(
+            `SELECT 
+                m.*,
+                CONCAT(u.first_name, ' ', u.last_name) as sender_name,
+                CASE WHEN m.sender_id = $1 THEN true ELSE false END as is_sender
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE m.project_id = $1
+            AND (
+                (m.sender_id = $2 AND m.recipient_id = $3)
+                OR 
+                (m.sender_id = $3 AND m.recipient_id = $2)
+            )
+            ORDER BY m.created_at ASC`,
+            [projectId, userId, recipientId]
+        );
+
+        console.log('Bulunan mesaj sayısı:', result.rows.length);
+
+        const messages = result.rows.map(msg => ({
+            id: msg.id,
+            content: msg.message_content,
+            sender_name: msg.sender_name,
+            created_at: msg.created_at,
+            isSender: msg.is_sender,
+            sender_id: msg.sender_id,
+            recipient_id: msg.recipient_id
+        }));
+
+        res.json({
+            success: true,
+            data: messages
+        });
+    } catch (error) {
+        console.error('Chat geçmişi hatası:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Mesajlar getirilemedi'
+        });
+    }
 };
 
 const createMessage = async (req: AuthRequest, res: Response) => {
@@ -310,3 +321,43 @@ const validateMessage = (req: Request, res: Response, next: NextFunction) => {
   }
   next();
 };
+
+export const getMessages = async (req: Request, res: Response) => {
+    try {
+        const { recipientId, projectId } = req.params; // URL'den parametreleri al
+        const userId = (req as any).user?.id;
+
+        console.log('Mesaj getirme parametreleri:', {
+            userId,
+            recipientId,
+            projectId
+        });
+
+        const result = await pool.query(
+            `SELECT 
+                m.*,
+                u.first_name || ' ' || u.last_name as sender_name,
+                CASE WHEN m.sender_id = $1 THEN true ELSE false END as is_sender
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE (m.sender_id = $1 AND m.recipient_id = $2)
+               OR (m.sender_id = $2 AND m.recipient_id = $1)
+            AND m.project_id = $3
+            ORDER BY m.created_at ASC`,
+            [userId, recipientId, projectId]
+        );
+
+        console.log('Bulunan mesajlar:', result.rows);
+
+        res.json({
+            success: true,
+            messages: result.rows
+        });
+    } catch (error) {
+        console.error('Mesaj getirme hatası:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Mesajlar alınırken bir hata oluştu'
+        });
+    }
+}

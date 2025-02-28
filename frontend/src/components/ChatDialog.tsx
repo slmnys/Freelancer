@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Paper,
   TextField,
@@ -11,17 +11,27 @@ import {
 import { Send as SendIcon, Close as CloseIcon, Remove as MinimizeIcon } from '@mui/icons-material';
 import Draggable from 'react-draggable';
 import { useSocket } from '../hooks/useSocket';
-import { useMessages } from '../hooks/useMessages';
+import api from '../utils/axios';
 
 interface ChatDialogProps {
   open: boolean;
   onClose: () => void;
-  projectId: string;
   recipientId: string;
+  projectId: string;
 }
 
-function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) {
+interface Message {
+  id: number;
+  content: string;
+  sender_name: string;
+  created_at: string;
+  isSender: boolean;
+}
+
+const ChatDialog: React.FC<ChatDialogProps> = ({ open, onClose, recipientId, projectId }) => {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const nodeRef = useRef<HTMLDivElement>(null);
@@ -30,32 +40,94 @@ function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) 
   const parsedProjectId = parseInt(projectId, 10);
   const parsedRecipientId = parseInt(recipientId, 10);
   
-  const { messages: fetchedMessages, isLoading, sendMessage } = useMessages(
-    projectId,
-    recipientId
-  );
-  
+  const loadMessages = useCallback(async () => {
+    try {
+        setLoading(true);
+        console.log('Mesaj yükleme isteği:', {
+            recipientId,
+            projectId,
+            url: `/messages/chat/${projectId}/${recipientId}`
+        });
+
+        const response = await api.get(`/messages/chat/${projectId}/${recipientId}`);
+        console.log('Mesaj yükleme cevabı:', response.data);
+
+        if (response.data.success) {
+            setMessages(response.data.data.map((msg: any) => ({
+                ...msg,
+                isSender: msg.sender_id === parseInt(localStorage.getItem('userId') || '0')
+            })));
+        }
+    } catch (error) {
+        console.error('Mesaj yükleme detaylı hata:', error);
+    } finally {
+        setLoading(false);
+    }
+}, [recipientId, projectId]);
+
   useEffect(() => {
-    scrollToBottom();
-  }, [fetchedMessages]);
+    if (open && recipientId) {
+      loadMessages();
+    }
+  }, [open, recipientId, loadMessages]);
 
   useEffect(() => {
     const currentSocket = socket.current;
     
     const messageHandler = (message: any) => {
-      if (message.project_id === parsedProjectId) {
-        scrollToBottom();
-      }
+        console.log('Yeni mesaj alındı:', message);
+        
+        if (message.projectId === parseInt(projectId) && 
+            (message.senderId === parseInt(recipientId) || message.recipientId === parseInt(recipientId))) {
+            loadMessages();
+            scrollToBottom();
+        }
     };
 
     currentSocket?.on('newMessage', messageHandler);
     return () => {
-      currentSocket?.off('newMessage', messageHandler);
+        currentSocket?.off('newMessage', messageHandler);
     };
-  }, [parsedProjectId, socket]);
+}, [projectId, recipientId, loadMessages, socket]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !recipientId) return;
+
+    try {
+        console.log('Mesaj gönderme isteği:', {
+            recipientId,
+            projectId,
+            content: newMessage
+        });
+
+        const response = await api.post('/messages', {
+            recipientId: parseInt(recipientId),
+            projectId: parseInt(projectId),
+            content: newMessage.trim()
+        });
+
+        console.log('Mesaj gönderme cevabı:', response.data);
+
+        if (response.data.success) {
+            setNewMessage('');
+            await loadMessages();
+            scrollToBottom();
+
+            socket.current?.emit('newMessage', {
+                content: newMessage,
+                projectId: parseInt(projectId),
+                recipientId: parseInt(recipientId),
+                senderId: parseInt(localStorage.getItem('userId') || '0')
+            });
+        }
+    } catch (error) {
+        console.error('Mesaj gönderme detaylı hata:', error);
+    }
   };
 
   if (!projectId || !recipientId) {
@@ -69,28 +141,6 @@ function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) 
   if (isNaN(parsedRecipientId) || parsedRecipientId <= 0) {
     return <Alert severity="error">Geçersiz alıcı</Alert>;
   }
-
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
-
-    try {
-      await sendMessage(newMessage);
-      setNewMessage('');
-      
-      socket.current?.emit('newMessage', {
-        content: newMessage,
-        projectId: parsedProjectId,
-        recipientId: parsedRecipientId,
-        senderId: parseInt(localStorage.getItem('userId') || '0', 10)
-      });
-
-      scrollToBottom();
-    } catch (error) {
-      console.error('Mesaj gönderme hatası:', error);
-      alert(`Mesaj gönderilemedi: ${(error as Error).message}`);
-    }
-  };
 
   if (!open) return null;
 
@@ -147,13 +197,13 @@ function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) 
         {!isMinimized && (
           <>
             <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
-              {isLoading ? (
+              {loading ? (
                 <Typography variant="body2" align="center">
                   Mesajlar yükleniyor...
                 </Typography>
               ) : (
                 <Stack spacing={2}>
-                  {fetchedMessages?.map((message) => (
+                  {messages?.map((message) => (
                     <Box
                       key={message.id}
                       sx={{
@@ -167,26 +217,35 @@ function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) 
                           maxWidth: '80%',
                           bgcolor: message.isSender ? 'primary.main' : 'grey.100',
                           color: message.isSender ? 'white' : 'text.primary',
-                          borderRadius: 2,
+                          borderRadius: message.isSender 
+                            ? '20px 20px 0 20px'
+                            : '20px 20px 20px 0',
                         }}
                       >
+                        {!message.isSender && (
+                          <Typography 
+                            component="span" 
+                            sx={{ 
+                              fontSize: '0.8rem', 
+                              color: message.isSender ? 'white' : 'text.secondary',
+                              display: 'block',
+                              mb: 0.5 
+                            }}
+                          >
+                            {message.sender_name}
+                          </Typography>
+                        )}
                         <Typography variant="body2">
-                          {!message.isSender && (
-                            <Typography 
-                              component="span" 
-                              sx={{ 
-                                fontSize: '0.8rem', 
-                                color: 'text.secondary',
-                                display: 'block',
-                                mb: 0.5 
-                              }}
-                            >
-                              {message.sender_name}
-                            </Typography>
-                          )}
                           {message.content || 'Boş mesaj'}
                         </Typography>
-                        <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            opacity: 0.7,
+                            display: 'block',
+                            textAlign: message.isSender ? 'right' : 'left'
+                          }}
+                        >
                           {new Date(message.created_at).toLocaleTimeString('tr-TR')}
                         </Typography>
                       </Paper>
@@ -219,7 +278,7 @@ function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) 
                 />
                 <IconButton
                   color="primary"
-                  type="submit"
+                  onClick={handleSend}
                   disabled={!newMessage.trim()}
                 >
                   <SendIcon />
@@ -231,6 +290,6 @@ function ChatDialog({ open, onClose, projectId, recipientId }: ChatDialogProps) 
       </Paper>
     </Draggable>
   );
-}
+};
 
 export default ChatDialog; 

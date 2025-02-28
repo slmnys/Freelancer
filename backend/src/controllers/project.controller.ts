@@ -22,62 +22,72 @@ export class ProjectController {
 
             const user = (req as any).user;
 
-            // İstek verilerini logla
-            console.log('=== Proje Oluşturma Detayları ===');
-            console.log('Kullanıcı bilgisi:', {
-                userId: user?.id,
-                userRole: user?.role
-            });
-            console.log('Proje verileri:', {
+            // Veri doğrulama
+            if (!title || !description || !budget || !deadline || !category) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Tüm alanlar zorunludur'
+                });
+            }
+
+            // Tarih kontrolü
+            const deadlineDate = new Date(deadline);
+            if (isNaN(deadlineDate.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Geçersiz tarih formatı'
+                });
+            }
+
+            console.log('Doğrulanmış veriler:', {
                 title,
                 description,
-                requirements: Array.isArray(requirements) ? requirements : requirements.split(','),
-                budget: parseFloat(budget),
-                deadline,
-                category
+                requirements,
+                budget,
+                deadline: deadlineDate,
+                category,
+                userId: user.id
             });
 
-            // SQL sorgusunu logla
-            const query = `INSERT INTO projects 
-                (title, description, requirements, budget, deadline, category, customer_id, creator_id, status, is_public)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'open', true)
-                RETURNING *`;
-            
-            console.log('SQL Sorgusu:', query);
-            console.log('Parametre değerleri:', [
+            const query = `
+                INSERT INTO projects (
+                    title,
+                    description,
+                    requirements,
+                    budget,
+                    deadline,
+                    category,
+                    creator_id,
+                    status,
+                    is_public,
+                    created_at
+                ) VALUES (
+                    $1, $2, $3::text[], $4, $5, $6, $7, 'open', true, NOW()
+                ) RETURNING *
+            `;
+
+            const values = [
                 title,
                 description,
-                Array.isArray(requirements) ? requirements : requirements.split(',').map((r: string) => r.trim()),
-                parseFloat(budget),
-                deadline,
+                requirements,
+                budget,
+                deadlineDate,
                 category,
                 user.id
-            ]);
+            ];
 
-            const result = await pool.query(query, [
-                title,
-                description,
-                Array.isArray(requirements) ? requirements : requirements.split(',').map((r: string) => r.trim()),
-                parseFloat(budget),
-                deadline,
-                category,
-                user.id
-            ]);
+            const result = await pool.query(query, values);
 
-            console.log('Veritabanı yanıtı:', result.rows[0]);
-            
-            res.status(201).json({
-                success: true,
-                project: result.rows[0]
-            });
+            if (result.rows[0]) {
+                return res.status(201).json({
+                    success: true,
+                    project: result.rows[0]
+                });
+            }
+
         } catch (error: any) {
-            console.error('=== Proje Oluşturma Hatası ===');
-            console.error('Hata mesajı:', error.message);
-            console.error('Hata detayı:', error);
-            console.error('SQL Hatası:', error.code);
-            console.error('SQL Detay:', error.detail);
-            
-            res.status(500).json({
+            console.error('Proje oluşturma hatası:', error);
+            return res.status(500).json({
                 success: false,
                 message: 'Proje oluşturulurken bir hata oluştu',
                 error: error.message
@@ -88,7 +98,8 @@ export class ProjectController {
     // Projeleri listele
     static async getProjects(req: Request, res: Response) {
         try {
-            const { sort = 'newest', status = 'all' } = req.query;
+            const { sort = 'newest', status = 'all', myProjects = false } = req.query;
+            const user = (req as any).user;
 
             let query = `
                 SELECT 
@@ -101,14 +112,22 @@ export class ProjectController {
                     p.category,
                     p.requirements,
                     p.created_at,
-                    u.first_name as customer_name,
-                    u.profile_image as customer_image
+                    u.first_name as creator_name,
+                    u.profile_image as creator_image
                 FROM projects p
-                LEFT JOIN users u ON p.customer_id = u.id
-                WHERE p.is_public = true
+                LEFT JOIN users u ON p.creator_id = u.id
+                WHERE 1=1
             `;
 
             const params: any[] = [];
+
+            // Eğer myProjects true ise, sadece kullanıcının kendi projelerini getir
+            if (myProjects === 'true' && user) {
+                query += ` AND p.creator_id = $${params.length + 1}`;
+                params.push(user.id);
+            } else {
+                query += ` AND p.is_public = true`;
+            }
 
             if (status !== 'all') {
                 query += ` AND p.status = $${params.length + 1}`;
@@ -129,6 +148,9 @@ export class ProjectController {
                 default:
                     query += 'p.created_at DESC';
             }
+
+            console.log('SQL Query:', query);
+            console.log('Params:', params);
 
             const result = await pool.query(query, params);
 
@@ -186,11 +208,12 @@ export class ProjectController {
             const result = await pool.query(
                 `SELECT 
                     p.*,
-                    u.id as customer_id,
-                    u.first_name || ' ' || u.last_name as customer_name,
-                    u.email as customer_email
+                    u.id as creator_id,
+                    u.first_name || ' ' || u.last_name as creator_name,
+                    u.email as creator_email,
+                    u.profile_image as creator_image
                 FROM projects p
-                INNER JOIN users u ON p.customer_id = u.id
+                LEFT JOIN users u ON p.creator_id = u.id
                 WHERE p.id = $1`,
                 [id]
             );
@@ -207,9 +230,12 @@ export class ProjectController {
                 success: true,
                 project: {
                     ...project,
-                    customer_id: project.customer_id.toString(), // ID'yi string'e çevir
+                    creator_id: project.creator_id?.toString(),
                     budget: parseFloat(project.budget),
-                    deadline: new Date(project.deadline).toISOString()
+                    deadline: new Date(project.deadline).toISOString(),
+                    requirements: Array.isArray(project.requirements) ? 
+                        project.requirements : 
+                        project.requirements ? [project.requirements] : []
                 }
             });
         } catch (error) {

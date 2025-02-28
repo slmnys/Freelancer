@@ -28,9 +28,10 @@ interface Project {
 
 interface ProjectListProps {
   searchQuery: string;
-  sortBy: string;
-  statusFilter: string;
-  categoryFilter: string;
+  sortBy?: string;
+  statusFilter?: string;
+  categoryFilter?: string;
+  myProjects?: boolean;
 }
 
 const ProjectList: React.FC<ProjectListProps> = ({

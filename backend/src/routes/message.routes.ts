@@ -1,6 +1,11 @@
 import express from 'express';
-import { authMiddleware } from '../middleware/auth.middleware';
-import { sendMessage, getProjectMessages } from '../controllers/message.controller';
+import { authMiddleware } from '../middleware/auth';
+import { 
+    sendMessage, 
+    getChatHistory, 
+    getUnreadMessages, 
+    markAsRead 
+} from '../controllers/message.controller';
 import { pool } from '../config/database';
 import { Request, Response } from 'express';
 
@@ -16,29 +21,104 @@ const router = express.Router();
 
 // Message controller fonksiyonları
 const messageController = {
+    getChatHistory: async (req: AuthRequest, res: Response) => {
+        try {
+            const { projectId, recipientId } = req.params;
+            const userId = req.user?.id;
+
+            console.log('Chat geçmişi isteği:', {
+                userId,
+                recipientId,
+                projectId
+            });
+
+            // Önce projeyi kontrol et
+            const projectCheck = await pool.query(
+                `SELECT creator_id, customer_id FROM projects WHERE id = $1`,
+                [projectId]
+            );
+
+            if (projectCheck.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Proje bulunamadı'
+                });
+            }
+
+            const project = projectCheck.rows[0];
+
+            // Kullanıcının bu projeye erişim yetkisi var mı kontrol et
+            if (userId !== project.creator_id && userId !== project.customer_id) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Bu projeye erişim yetkiniz yok'
+                });
+            }
+
+            // İki yönlü mesajlaşmayı getir
+            const result = await pool.query(
+                `SELECT 
+                    m.*,
+                    CONCAT(u.first_name, ' ', u.last_name) as sender_name,
+                    CASE WHEN m.sender_id = $1 THEN true ELSE false END as is_sender
+                FROM messages m
+                JOIN users u ON m.sender_id = u.id
+                WHERE m.project_id = $3
+                AND (
+                    (m.sender_id = $1 AND m.recipient_id = $2)
+                    OR 
+                    (m.sender_id = $2 AND m.recipient_id = $1)
+                )
+                ORDER BY m.created_at ASC`,
+                [userId, recipientId, projectId]
+            );
+
+            console.log('Bulunan mesaj sayısı:', result.rows.length);
+
+            res.json({
+                success: true,
+                data: result.rows
+            });
+        } catch (error) {
+            console.error('Chat geçmişi hatası:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Mesajlar getirilemedi'
+            });
+        }
+    },
+
     sendMessage: async (req: AuthRequest, res: Response) => {
         try {
             const { content, projectId, recipientId } = req.body;
             const senderId = req.user?.id;
 
-            console.log('Mesaj gönderme isteği:', {
-                content,
-                projectId,
-                recipientId,
-                senderId
-            });
+            // Proje kontrolü
+            const projectCheck = await pool.query(
+                `SELECT creator_id, customer_id FROM projects WHERE id = $1`,
+                [projectId]
+            );
 
-            if (!senderId || !recipientId) {
-                return res.status(400).json({
+            if (projectCheck.rows.length === 0) {
+                return res.status(404).json({
                     success: false,
-                    message: 'Gönderici veya alıcı ID eksik'
+                    message: 'Proje bulunamadı'
                 });
             }
 
-            // Projeye erişim kontrolünü kaldır, sadece mesajı kaydet
+            const project = projectCheck.rows[0];
+
+            // Kullanıcının bu projeye mesaj gönderme yetkisi var mı kontrol et
+            if (senderId !== project.creator_id && senderId !== project.customer_id) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Bu projeye mesaj gönderme yetkiniz yok'
+                });
+            }
+
             const result = await pool.query(
                 `INSERT INTO messages 
-                 (message_content, project_id, sender_id, recipient_id, created_at)
+                 (content, project_id, sender_id, recipient_id, created_at)
                  VALUES ($1, $2, $3, $4, NOW())
                  RETURNING *`,
                 [content, projectId, senderId, recipientId]
@@ -157,45 +237,6 @@ const messageController = {
             res.status(500).json({
                 success: false,
                 message: 'Mesaj işaretlenemedi'
-            });
-        }
-    },
-
-    getChatHistory: async (req: AuthRequest, res: Response) => {
-        try {
-            const { projectId, recipientId } = req.params;
-            const userId = req.user?.id;
-
-            if (!userId) {
-                return res.status(401).json({
-                    success: false,
-                    message: 'Kullanıcı kimliği bulunamadı'
-                });
-            }
-
-            // Tüm mesajları getir, proje kontrolü olmadan
-            const result = await pool.query(
-                `SELECT m.*, 
-                        u.first_name as sender_name, 
-                        u.email as sender_email,
-                        m.message_content as content
-                 FROM messages m
-                 JOIN users u ON m.sender_id = u.id
-                 WHERE m.project_id = $1
-                 AND (m.sender_id = $2 OR m.recipient_id = $2)
-                 ORDER BY m.created_at ASC`,
-                [projectId, userId]
-            );
-
-            res.json({
-                success: true,
-                data: result.rows
-            });
-        } catch (error) {
-            console.error('Mesaj getirme hatası:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Mesajlar getirilemedi'
             });
         }
     }
